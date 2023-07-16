@@ -18,10 +18,11 @@ public class HostGameManager : IDisposable {
     private const int MAX_CONNECTIONS = 20;
     private const string GAME_SCENE_NAME = "Game";
 
+    public NetworkServer NetworkServer { get; private set; }
+
     private Allocation allocation;
     private string joinCode;
     private string lobbyId;
-    private NetworkServer networkServer;
 
     public async Task StartHostAsync() {//Creates relay data for the host and stores it in the transport to start the host
         try {
@@ -66,7 +67,7 @@ public class HostGameManager : IDisposable {
             return;
         }
 
-        networkServer = new NetworkServer(NetworkManager.Singleton);
+        NetworkServer = new NetworkServer(NetworkManager.Singleton);
 
         UserData userData = new UserData {
             userName = PlayerPrefs.GetString(NameSelector.PLAYER_NAME_KEY, "Missing Name"),
@@ -79,6 +80,8 @@ public class HostGameManager : IDisposable {
 
         NetworkManager.Singleton.StartHost();
 
+        NetworkServer.OnClientLeft += HandleClientLeft;
+
         NetworkManager.Singleton.SceneManager.LoadScene(GAME_SCENE_NAME, LoadSceneMode.Single);
     }
 
@@ -89,7 +92,11 @@ public class HostGameManager : IDisposable {
             yield return delay;
         }
     }
-    public async void Dispose() {
+    public void Dispose() {
+        ShutDown();
+    }
+
+    public async void ShutDown() {
         HostSingleton.Instance.StopCoroutine(nameof(HeartbeatLobby));
 
         if (!string.IsNullOrEmpty(lobbyId)) {
@@ -102,7 +109,16 @@ public class HostGameManager : IDisposable {
             lobbyId = string.Empty;
         }
 
-        networkServer?.Dispose();
+        NetworkServer.OnClientLeft -= HandleClientLeft;
+
+        NetworkServer?.Dispose();
     }
 
+    private void HandleClientLeft(string authId) {
+        try {
+            LobbyService.Instance.RemovePlayerAsync(lobbyId, authId);
+        } catch (LobbyServiceException e) {
+            Debug.Log(e);
+        }
+    }
 }
