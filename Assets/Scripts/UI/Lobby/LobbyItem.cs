@@ -20,6 +20,6 @@ public class LobbyItem : MonoBehaviour
     }
 
     public void Join() {
-        lobbiesList.JoinAsync(lobby);
+        lobbiesList.Join(lobby);
     }
 }

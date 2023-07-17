@@ -19,12 +19,17 @@ public class HostGameManager : IDisposable {
     private const string GAME_SCENE_NAME = "Game";
 
     public NetworkServer NetworkServer { get; private set; }
+    public string JoinCode { get; private set; }
 
     private Allocation allocation;
-    private string joinCode;
     private string lobbyId;
+    private NetworkObject playerPrefab;
 
-    public async Task StartHostAsync() {//Creates relay data for the host and stores it in the transport to start the host
+    public HostGameManager(NetworkObject playerPrefab) { 
+        this.playerPrefab = playerPrefab;
+    }
+
+    public async Task StartHostAsync(bool isPrivate) {//Creates relay data for the host and stores it in the transport to start the host        
         try {
             allocation = await Relay.Instance.CreateAllocationAsync(MAX_CONNECTIONS);
         } catch (Exception e) {
@@ -33,8 +38,8 @@ public class HostGameManager : IDisposable {
         }
 
         try {
-            joinCode = await Relay.Instance.GetJoinCodeAsync(allocation.AllocationId);
-            Debug.Log(joinCode);
+            JoinCode = await Relay.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            Debug.Log(JoinCode);
         } catch (Exception e) {
             Debug.Log(e);
             return;
@@ -47,13 +52,14 @@ public class HostGameManager : IDisposable {
 
         try {
             CreateLobbyOptions lobbyOptions = new CreateLobbyOptions();
-            lobbyOptions.IsPrivate = false;
+            lobbyOptions.IsPrivate = isPrivate;
             lobbyOptions.Data = new Dictionary<string, DataObject> {
                 {
-                    "JoinCode", new DataObject(
-                            visibility: DataObject.VisibilityOptions.Member,
-                            value: joinCode
-                        )
+                    "JoinCode",
+                    new DataObject(
+                        visibility: DataObject.VisibilityOptions.Member,
+                        value: JoinCode
+                    )
                 }
             };
 
@@ -67,7 +73,7 @@ public class HostGameManager : IDisposable {
             return;
         }
 
-        NetworkServer = new NetworkServer(NetworkManager.Singleton);
+        NetworkServer = new NetworkServer(NetworkManager.Singleton, playerPrefab);
 
         UserData userData = new UserData {
             userName = PlayerPrefs.GetString(NameSelector.PLAYER_NAME_KEY, "Missing Name"),
@@ -97,17 +103,17 @@ public class HostGameManager : IDisposable {
     }
 
     public async void ShutDown() {
+        if (string.IsNullOrEmpty(lobbyId)) { return; }
+
         HostSingleton.Instance.StopCoroutine(nameof(HeartbeatLobby));
 
-        if (!string.IsNullOrEmpty(lobbyId)) {
-            try {
-                await Lobbies.Instance.DeleteLobbyAsync(lobbyId);
-            } catch (LobbyServiceException e) {
-                Debug.Log(e);
-            }
-
-            lobbyId = string.Empty;
+        try {
+            await Lobbies.Instance.DeleteLobbyAsync(lobbyId);
+        } catch (LobbyServiceException e) {
+            Debug.Log(e);
         }
+
+        lobbyId = string.Empty;
 
         NetworkServer.OnClientLeft -= HandleClientLeft;
 

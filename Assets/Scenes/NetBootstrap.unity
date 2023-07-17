@@ -426,6 +426,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   clientPrefab: {fileID: 8688393273756081451, guid: 0ee514843c9813948af8c8e735042eb2, type: 3}
   hostPrefab: {fileID: 3718036565675864121, guid: bdd92c46602d28f4bbcf6d4b7ecbb83f, type: 3}
+  serverPrefab: {fileID: 6691728735173304026, guid: f70b4d540e470db4b986098c29a9a54f, type: 3}
+  playerPrefab: {fileID: 743377407232946036, guid: f4a0b1f65c88d9643b87a2a2bd3933c7, type: 3}
 --- !u!4 &535516087
 Transform:
   m_ObjectHideFlags: 0
@@ -501,9 +503,10 @@ MonoBehaviour:
   NetworkConfig:
     ProtocolVersion: 0
     NetworkTransport: {fileID: 615368781}
-    PlayerPrefab: {fileID: 7773223695055892346, guid: f4a0b1f65c88d9643b87a2a2bd3933c7, type: 3}
+    PlayerPrefab: {fileID: 0}
     Prefabs:
       NetworkPrefabsLists:
+      - {fileID: 11400000, guid: 04d2baa65d332ba4d9496e6306be615d, type: 2}
       - {fileID: 11400000, guid: 23989a3f84d037e4da595478af6c38fc, type: 2}
     TickRate: 30
     ClientConnectionBufferTimeout: 10

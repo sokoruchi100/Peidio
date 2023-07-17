@@ -19,15 +19,23 @@ public class ClientGameManager : IDisposable {
 
     private JoinAllocation allocation;
     private NetworkClient networkClient;
+    private MatchplayMatchmaker matchmaker;
+    private UserData userData;
 
     public async Task<bool> InitAsync() { //For testing client authentication
         await UnityServices.InitializeAsync();
 
         networkClient = new NetworkClient(NetworkManager.Singleton);
+        matchmaker = new MatchplayMatchmaker();
 
         AuthState authState = await AuthenticationWrapper.DoAuth(); //Waits until auth finished
 
         if (authState == AuthState.Authenticated) {
+            userData = new UserData {
+                userName = PlayerPrefs.GetString(NameSelector.PLAYER_NAME_KEY, "Missing Name"),
+                userAuthId = AuthenticationService.Instance.PlayerId
+            };
+
             return true;
         }
 
@@ -38,7 +46,7 @@ public class ClientGameManager : IDisposable {
         SceneManager.LoadScene(MENU_SCENE_NAME);
     }
 
-    public async Task StartClientAsync(string joinCode) {
+    public async Task StartClientAsync(string joinCode) {//For connecting to host lobby
         try {
             allocation = await Relay.Instance.JoinAllocationAsync(joinCode);
         } catch (Exception e) {
@@ -51,10 +59,17 @@ public class ClientGameManager : IDisposable {
         RelayServerData relayServerData = new RelayServerData(allocation, "dtls");
         transport.SetRelayServerData(relayServerData);
 
-        UserData userData = new UserData { 
-            userName = PlayerPrefs.GetString(NameSelector.PLAYER_NAME_KEY, "Missing Name"),
-            userAuthId = AuthenticationService.Instance.PlayerId
-        };
+        ConnectClient();
+    }
+
+    public void StartClient(string ip, int port) {// For connecting to dedicated server
+        UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+        transport.SetConnectionData(ip, (ushort) port);
+
+        ConnectClient();
+    }
+
+    private void ConnectClient() {//For connecting clients to the network
         string payload = JsonUtility.ToJson(userData);
         byte[] payloadBytes = Encoding.UTF8.GetBytes(payload);
 
@@ -63,13 +78,36 @@ public class ClientGameManager : IDisposable {
         NetworkManager.Singleton.StartClient();
     }
 
-    internal void Disconnect() {
+    public async void MatchmakeAsync(bool isTeamQueue, Action<MatchmakerPollingResult> onMatchmakeResponse) {
+        if (matchmaker.IsMatchmaking) {
+            return;
+        }
+
+        userData.userGamePreferences.gameQueue = isTeamQueue ? GameQueue.Team : GameQueue.Solo;
+        MatchmakerPollingResult matchResult = await GetMatchAsync();
+        onMatchmakeResponse?.Invoke(matchResult);
+    }
+
+    private async Task<MatchmakerPollingResult> GetMatchAsync() {
+        MatchmakingResult matchmakingResult = await matchmaker.Matchmake(userData);
+
+        if (matchmakingResult.result == MatchmakerPollingResult.Success) {
+            //Connect to Server
+            StartClient(matchmakingResult.ip, matchmakingResult.port);
+        }
+
+        return matchmakingResult.result;
+    }
+
+    public async Task CancelMatchmaking() {
+        await matchmaker.CancelMatchmaking();
+    }
+
+    public void Disconnect() {
         networkClient.Disconnect();
     }
 
     public void Dispose() {
         networkClient?.Dispose();
     }
-
-    
 }

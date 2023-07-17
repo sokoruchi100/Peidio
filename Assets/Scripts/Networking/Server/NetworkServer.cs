@@ -1,22 +1,33 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Unity.Netcode;
+using Unity.Netcode.Transports.UTP;
 using UnityEngine;
 
 public class NetworkServer : IDisposable {
     private NetworkManager networkManager;
-    private Dictionary<ulong, string> clientIdToAuth;
-    private Dictionary<string, UserData> authIdToUserData;
+    private NetworkObject playerPrefab;
+    private Dictionary<ulong, string> clientIdToAuth = new Dictionary<ulong, string>();
+    private Dictionary<string, UserData> authIdToUserData = new Dictionary<string, UserData>();
 
     public Action<string> OnClientLeft;
+    public Action<UserData> OnUserJoined;
+    public Action<UserData> OnUserLeft;
 
-    public NetworkServer(NetworkManager networkManager) { 
+    public NetworkServer(NetworkManager networkManager, NetworkObject playerPrefab) { 
         this.networkManager = networkManager;
-        clientIdToAuth = new Dictionary<ulong, string>();
-        authIdToUserData = new Dictionary<string, UserData>();
+        this.playerPrefab = playerPrefab;
+
         networkManager.ConnectionApprovalCallback += ApprovalCheck;
         networkManager.OnServerStarted += NetworkManager_OnServerStarted;
+    }
+
+    public bool OpenConnection(string ip, int port) {
+        UnityTransport transport = networkManager.gameObject.GetComponent<UnityTransport>();
+        transport.SetConnectionData(ip, (ushort) port);
+        return networkManager.StartServer();
     }
 
     private void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response) {
@@ -25,11 +36,20 @@ public class NetworkServer : IDisposable {
 
         clientIdToAuth[request.ClientNetworkId] = userData.userAuthId;
         authIdToUserData[userData.userAuthId] = userData;
+        OnUserJoined?.Invoke(userData);
+
+        _ = SpawnPlayerDelayed(request.ClientNetworkId);
 
         response.Approved = true;
-        response.Position = SpawnPoint.GetRandomSpawnPos();
-        response.Rotation = Quaternion.identity;
-        response.CreatePlayerObject = true;
+        response.CreatePlayerObject = false;
+    }
+
+    private async Task SpawnPlayerDelayed(ulong clientId) {
+        await Task.Delay(1000);
+
+        NetworkObject playerInstance = GameObject.Instantiate(playerPrefab, SpawnPoint.GetRandomSpawnPos(), Quaternion.identity);
+
+        playerInstance.SpawnAsPlayerObject(clientId);
     }
 
     private void NetworkManager_OnServerStarted() {
@@ -49,6 +69,7 @@ public class NetworkServer : IDisposable {
     private void NetworkManager_OnClientDisconnectCallback(ulong clientId) {
         if (clientIdToAuth.TryGetValue(clientId, out string authId)) {
             clientIdToAuth.Remove(clientId);
+            OnUserLeft?.Invoke(authIdToUserData[authId]);
             authIdToUserData.Remove(authId);
             OnClientLeft?.Invoke(authId);
         }

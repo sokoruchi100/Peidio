@@ -21,16 +21,21 @@ public class UserData
 {
     public string userName;
     public string userAuthId;
-    public GameInfo userGamePreferences;
+    public int teamIndex = -1;
+    public GameInfo userGamePreferences = new GameInfo();
 }
 
 [Serializable]
 public class GameInfo {
     public Map map;
-    public GameMode mode;
-    public GameQueue queue;
+    public GameMode gameMode;
+    public GameQueue gameQueue;
 
     public string ToMultiplayQueue() {
-        return "";
+        return gameQueue switch {
+            GameQueue.Solo => "solo-queue",
+            GameQueue.Team => "team-queue",
+            _ => "solo-queue"
+        };
     }
 }
